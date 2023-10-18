@@ -107,7 +107,7 @@ if __name__ == '__main__':
     logdir = os.path.join(args.logdir, expname)
     print(expname, flush=True)
     if args.rl:
-        args.resume = True
+        args.resume = False
         args.bs = 1
 
     if os.path.exists("/project/lt200060-capgen/palm/"):
@@ -146,7 +146,7 @@ if __name__ == '__main__':
         val_json = '/home/palm/data/coco/annotations/annotations/captions_val2017.json'
         config_file = '/home/palm/PycharmProjects/mmdetection/configs/dino/dino-4scale_r50_8xb2-12e_coco.py'
         detector_weight = '/home/palm/PycharmProjects/mmdetection/cp/dino-4scale_r50_8xb2-12e_coco_20221202_182705-55b2bba2.pth'
-        output_dir = 'workdir'
+        output_dir = os.path.join('workdir', expname)
         bleu_path = 'bleu'
         rouge_path = 'rouge'
         bs = 8
@@ -160,6 +160,7 @@ if __name__ == '__main__':
     encoder = AutoModel.from_pretrained(vit_model)
     decoder = AutoModelForCausalLM.from_pretrained(text_decode_model, add_cross_attention=True)
     model = RLVisionEncoderDecoderModel(args.rl, None, encoder, decoder)
+    model.load_state_dict(torch.load('workdir/train/pytorch_model.bin'), strict=False)
     feature_extractor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
     tokenizer = AutoTokenizer.from_pretrained(text_decode_model)
