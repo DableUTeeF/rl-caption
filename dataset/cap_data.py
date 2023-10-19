@@ -13,6 +13,7 @@ class ImageDataset(Dataset):
     def __init__(self,
                  json_file,
                  feats_dir,
+                 is_rl,
                  is_training=True,
                  img_h=224,
                  img_w=224,
@@ -23,6 +24,7 @@ class ImageDataset(Dataset):
         json_file = json.load(open(json_file))
         self.data_aug = data_aug
         self.convert_mode = convert_mode
+        self.is_rl = is_rl
         self.img_h = img_h
         self.img_w = img_w
         self.multiscales = multiscales
@@ -43,8 +45,11 @@ class ImageDataset(Dataset):
 
     def __getitem__(self, idx):
         data = self.captions[idx]
-        image = os.path.join(self.feats_dir, f'{data["image_id"]:012d}.jpg.pth')
-        image = torch.load(image, map_location='cpu')
+        if not self.is_rl:
+            image = os.path.join(self.feats_dir, f'{data["image_id"]:012d}.jpg.pth')
+            image = torch.load(image, map_location='cpu')
+        else:
+            image = os.path.join(self.feats_dir, self.folder, f'{data["image_id"]:012d}.jpg')
         text = data['caption']
         return image, text
 

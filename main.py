@@ -62,6 +62,16 @@ def collate_fn(batch):
     return model_inputs
 
 
+def collate_fn_rl(batch):
+    model_inputs = {'labels': [], 'pixel_values': []}
+    for obj in batch:
+        model_inputs['labels'].append(obj[1])
+        model_inputs['pixel_values'].append(obj[0])
+    model_inputs['labels'] = tokenization_fn(model_inputs['labels'])
+    model_inputs['pixel_values'] = feature_extraction_fn(model_inputs['pixel_values'])
+    return model_inputs
+
+
 def compute_metrics(eval_preds):
     preds, labels = eval_preds
     if isinstance(preds, tuple):
@@ -174,16 +184,18 @@ if __name__ == '__main__':
         model.save_pretrained(os.path.join(output_dir, 'train'))
         feature_extractor.save_pretrained(os.path.join(output_dir, 'train'))
         tokenizer.save_pretrained(os.path.join(output_dir, 'train'))
-
+    dir = feats_dir if not args.rl else src_dir
     train_set = ImageDataset(
         train_json,
-        feats_dir,
+        dir,
+        args.rl,
         is_training=True,
     )
     print(len(train_set), flush=True)
     valid_set = ImageDataset(
         val_json,
-        feats_dir,
+        dir,
+        args.rl,
         is_training=False,
     )
     print(len(valid_set), flush=True)
@@ -214,7 +226,7 @@ if __name__ == '__main__':
         compute_metrics=compute_metrics,
         train_dataset=train_set,
         eval_dataset=valid_set,
-        data_collator=collate_fn,
+        data_collator=collate_fn if not args.rl else collate_fn_rl,
     )
     trainer.add_callback(EvaluateFirstStepCallback())
 
