@@ -135,13 +135,15 @@ if __name__ == '__main__':
         workers = 4
         disable_tqdm = True
     elif os.path.exists("/media/palm/Data/capgen/"):
-        os.environ['CUDA_VISIBLE_DEVICES'] = ''
+        # os.environ['CUDA_VISIBLE_DEVICES'] = ''
         vit_model = "google/vit-base-patch16-224-in21k"
         text_decode_model = "gpt2"
-        src_dir = "/media/palm/Data/ocr/"
+        train_json = '/media/palm/data/coco/annotations/captions_train2017.json'
+        val_json = '/media/palm/data/coco/annotations/captions_val2017.json'
+        src_dir = "/media/palm/data/coco/images"
         config_file = '/home/palm/PycharmProjects/mmdetection/configs/dino/dino-4scale_r50_8xb2-12e_coco.py'
         detector_weight = ''
-        output_dir = os.path.join('/tmp/out/mm_dino_8x8')
+        output_dir = os.path.join('/media/palm/BiggerData/capgen/cp', expname)
         bleu_path = 'bleu'
         rouge_path = 'rouge'
         bs = 1
@@ -170,7 +172,7 @@ if __name__ == '__main__':
     encoder = AutoModel.from_pretrained(vit_model)
     decoder = AutoModelForCausalLM.from_pretrained(text_decode_model, add_cross_attention=True)
     model = RLVisionEncoderDecoderModel(args.rl, None, encoder, decoder)
-    model.load_state_dict(torch.load('workdir/train/pytorch_model.bin'), strict=False)
+    model.load_state_dict(torch.load('workdir/train/pytorch_model.bin', map_location='cpu'), strict=False)
     feature_extractor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
     tokenizer = AutoTokenizer.from_pretrained(text_decode_model)
