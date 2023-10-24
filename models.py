@@ -63,8 +63,8 @@ def compute_image_text_similarity_via_embeddings(image_embeds, text_embeds, clip
 
 def compute_text_representation(text_list, clip_model, clip_tokenizer, device):
     # text_list: a list of text
-    text_inputs = clip_tokenizer(text_list, padding=True, return_tensors="pt",
-                                 max_length=clip_tokenizer.max_len_single_sentence + 2, truncation=True).to(device)
+    text_inputs = clip_tokenizer(text_list, padding='max_length', return_tensors="pt",
+                                 max_length=77, truncation=True).to(device)
     # self.tokenizer.max_len_single_sentence + 2 = 77
     input_ids, attention_mask = text_inputs['input_ids'], text_inputs['attention_mask']
 
@@ -92,17 +92,20 @@ def reward_clip(clip_model, clip_tokenizer):
 
 
 class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
-    def __init__(self, rl, *args, **kwargs):
+    def __init__(self, clippath, tokenizerpath, rl, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.rl = rl
+        self.cce = CrossEntropyLoss()
         if self.rl:
-            self.clip_model = AutoModel.from_pretrained("openai/clip-vit-base-patch32")
-            self.clip_tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-            self.tokenizer = AutoTokenizer.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
-            self.image_processor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+            self.clip_model = AutoModel.from_pretrained(clippath)
+            self.clip_tokenizer = AutoTokenizer.from_pretrained(clippath)
+            self.tokenizer = AutoTokenizer.from_pretrained(clippath)
+            self.image_processor = ViTImageProcessor.from_pretrained(clippath)
             self.loss_fct = reward_clip(self.clip_model, self.clip_tokenizer)
+            self.skip = True
         else:
             self.loss_fct = CrossEntropyLoss()
+            self.skip = False
 
     def forward(
             self,
@@ -169,14 +172,16 @@ class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
         loss = None
         if labels is not None:
             if self.rl:
+                self.rl = False  # someone think of a better idea for this please
                 loss = compute_rl_loss(
                     self, self.image_processor, self.tokenizer,
                     pixel_values, labels,
                     self.loss_fct
                 )
+                self.rl = True
             else:
                 logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
-                loss = self.loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
+                loss = self.cce(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
 
         if not return_dict:
             if loss is not None:

@@ -122,16 +122,17 @@ if __name__ == '__main__':
 
     if os.path.exists("/project/lt200060-capgen/palm/"):
         vit_model = "/project/lt200060-capgen/palm/huggingface/vit-base-patch16-224-in21k"
-        text_decode_model = args.decoder
-        src_dir = "/project/lt200060-capgen/palm/capocr/data6"
-        val_json = '/project/lt200060-capgen/palm/capocr/data6/val.jsonl'
-        train_json = '/project/lt200060-capgen/palm/capocr/data6/train.jsonl'
+        text_decode_model = '/project/lt200060-capgen/palm/huggingface/gpt2'
+        train_json = '/project/lt200060-capgen/coco/annotations/captions_train2017.json'
+        val_json = '/project/lt200060-capgen/coco/annotations/captions_val2017.json'
+        src_dir = "/project/lt200060-capgen/coco/images"
         config_file = '/home/nhongcha/mmdetection/configs/dino/dino-4scale_r50_8xb2-12e_coco.py'
         detector_weight = '/project/lt200060-capgen/palm/pretrained/dino-4scale_r50_8xb2-12e_coco_20221202_182705-55b2bba2.pth'
         output_dir = os.path.join('/project/lt200060-capgen/palm/rl-caption/workdir/', expname)
         bleu_path = '/home/nhongcha/hf-caption/bleu/bleu.py'
         rouge_path = '/home/nhongcha/hf-caption/rouge/'
         bs = args.bs
+        clippath = '/project/lt200060-capgen/palm/huggingface/clip-vit-base-patch32'
         workers = 4
         disable_tqdm = True
     elif os.path.exists("/media/palm/Data/capgen/"):
@@ -171,9 +172,9 @@ if __name__ == '__main__':
     ignore_pad_token_for_loss = True
     encoder = AutoModel.from_pretrained(vit_model)
     decoder = AutoModelForCausalLM.from_pretrained(text_decode_model, add_cross_attention=True)
-    model = RLVisionEncoderDecoderModel(args.rl, None, encoder, decoder)
+    model = RLVisionEncoderDecoderModel(clippath, text_decode_model, args.rl, None, encoder, decoder)
     model.load_state_dict(torch.load('workdir/train/pytorch_model.bin', map_location='cpu'), strict=False)
-    feature_extractor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    feature_extractor = AutoProcessor.from_pretrained(clippath)
 
     tokenizer = AutoTokenizer.from_pretrained(text_decode_model)
     tokenizer.pad_token = tokenizer.eos_token
