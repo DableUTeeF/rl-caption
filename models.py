@@ -3,6 +3,7 @@ from transformers.models.vision_encoder_decoder.modeling_vision_encoder_decoder 
 from torch import nn
 from transformers.modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput
 import torch
+from sentence_transformers import SentenceTransformer
 
 
 def compute_loss(model, pixel_values, labels, sample_weights):
@@ -91,18 +92,27 @@ def reward_clip(clip_model, clip_tokenizer):
     return _reward_fct
 
 
+def compute_sbert_loss(model, pd, gt):
+    labels = model.encode(gt, convert_to_numpy=False, convert_to_tensor=True)
+    predict = model.encode(pd, convert_to_numpy=False, convert_to_tensor=True)
+    return torch.cosine_similarity(predict, labels).abs().mean()
+
+
 class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
-    def __init__(self, clippath, tokenizerpath, rl, *args, **kwargs):
+    def __init__(self, clippath, tokenizerpath, mode, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.rl = rl
+        self.mode = mode
         self.cce = CrossEntropyLoss()
-        if self.rl:
+        if self.mode == 'clip':
             self.clip_model = AutoModel.from_pretrained(clippath)
             self.clip_tokenizer = AutoTokenizer.from_pretrained(clippath)
             self.tokenizer = AutoTokenizer.from_pretrained(clippath)
             self.image_processor = ViTImageProcessor.from_pretrained(clippath)
             self.loss_fct = reward_clip(self.clip_model, self.clip_tokenizer)
             self.skip = True
+        elif self.mode == 'sbert':
+            self.sbert = SentenceTransformer('sentence-transformers/stsb-xlm-r-multilingual')
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizerpath)
         else:
             self.loss_fct = CrossEntropyLoss()
             self.skip = False
@@ -171,14 +181,19 @@ class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
         # Compute loss independent from decoder (as some shift the logits inside them)
         loss = None
         if labels is not None:
-            if self.rl:
-                self.rl = False  # someone think of a better idea for this please
+            if self.mode == 'clip':
+                self.mode = None  # someone think of a better idea for this please
                 loss = compute_rl_loss(
                     self, self.image_processor, self.tokenizer,
                     pixel_values, labels,
                     self.loss_fct
                 )
-                self.rl = True
+                self.mode = 'clip'
+            elif self.mode == 'sbert':
+                logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
+                gt = self.tokenizer.decode(labels, skip_special_tokens=True)
+                pd = self.tokenizer.decode(logits, skip_special_tokens=True)
+                loss = compute_sbert_loss(self.sbert, pd, gt)
             else:
                 logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
                 loss = self.cce(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
@@ -200,3 +215,8 @@ class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+
+if __name__ == '__main__':
+    model = SentenceTransformer('sentence-transformers/stsb-xlm-r-multilingual')
+    compute_sbert_loss

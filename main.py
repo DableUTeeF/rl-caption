@@ -111,6 +111,7 @@ if __name__ == '__main__':
     parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--rl', action='store_true')
+    parser.add_argument('--clip', action='store_true')
     parser.add_argument('--logdir', type=str, default='./logs')
     args = parser.parse_args()
     expname = args.expname + f'_{args.bs}'
@@ -119,7 +120,13 @@ if __name__ == '__main__':
     if args.rl:
         args.resume = False
         args.bs = 1
-
+    if args.rl:
+        if args.clip:
+            mode = 'clip'
+        else:
+            mode = 'sbert'
+    else:
+        mode = None
     if os.path.exists("/project/lt200060-capgen/palm/"):
         vit_model = "/project/lt200060-capgen/palm/huggingface/vit-base-patch16-224-in21k"
         text_decode_model = '/project/lt200060-capgen/palm/huggingface/gpt2'
@@ -147,7 +154,7 @@ if __name__ == '__main__':
         output_dir = os.path.join('/media/palm/BiggerData/capgen/cp', expname)
         bleu_path = 'bleu'
         rouge_path = 'rouge'
-        bs = 1
+        bs = args.bs
         workers = 0
         disable_tqdm = False
     else:
@@ -162,7 +169,7 @@ if __name__ == '__main__':
         output_dir = os.path.join('workdir', expname)
         bleu_path = 'bleu'
         rouge_path = 'rouge'
-        bs = 8
+        bs = args.bs
         workers = 0
         disable_tqdm = False
     rouge = evaluate.load(rouge_path)
@@ -172,7 +179,7 @@ if __name__ == '__main__':
     ignore_pad_token_for_loss = True
     encoder = AutoModel.from_pretrained(vit_model)
     decoder = AutoModelForCausalLM.from_pretrained(text_decode_model, add_cross_attention=True)
-    model = RLVisionEncoderDecoderModel(clippath, text_decode_model, args.rl, None, encoder, decoder)
+    model = RLVisionEncoderDecoderModel(clippath, text_decode_model, mode, None, encoder, decoder)
     model.load_state_dict(torch.load('workdir/train/pytorch_model.bin', map_location='cpu'), strict=False)
     feature_extractor = AutoProcessor.from_pretrained(clippath)
 
