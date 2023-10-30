@@ -33,9 +33,11 @@ def compute_rl_loss(model, image_processor, tokenizer, pixel_values, gt_labels, 
         num_return_sequences=3,
     )
     generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-    score = reward_fct(generated_texts, pixel_values, model.device)  # return tensor
+    score = reward_fct(generated_texts, pixel_values, gt_labels, model.device)  # return tensor
     mu = score.mean()
     sample_weights = score - mu
+    sample_weights = sample_weights - sample_weights.min() + 1e-6
+    sample_weights = sample_weights / sample_weights.sum()
 
     return compute_loss(model, pixel_values, generated_ids, sample_weights)
 
@@ -84,7 +86,7 @@ def compute_image_text_similarity_via_raw_text(image_embeds, text_list, clip_mod
 
 
 def reward_clip(clip_model, clip_tokenizer):
-    def _reward_fct(generated_texts, pixel_values, device):
+    def _reward_fct(generated_texts, pixel_values, gt_text, device):
         image_embeds = compute_image_representation_from_image_instance(pixel_values, clip_model)
 
         return compute_image_text_similarity_via_raw_text(image_embeds, generated_texts, clip_model, clip_tokenizer, device)
@@ -92,10 +94,13 @@ def reward_clip(clip_model, clip_tokenizer):
     return _reward_fct
 
 
-def compute_sbert_loss(model, pd, gt):
-    labels = model.encode(gt, convert_to_numpy=False, convert_to_tensor=True)
-    predict = model.encode(pd, convert_to_numpy=False, convert_to_tensor=True)
-    return torch.cosine_similarity(predict, labels).abs().mean()
+def reward_sbert(model, tokenizer):
+    def _reward_fct(generated_texts, pixel_values, gt_ids, device):
+        gt_text = tokenizer.batch_decode(gt_ids, skip_special_tokens=True)
+        labels = model.encode(gt_text, convert_to_numpy=False, convert_to_tensor=True)
+        predict = model.encode(generated_texts, convert_to_numpy=False, convert_to_tensor=True)
+        return torch.cosine_similarity(predict, labels)
+    return _reward_fct
 
 
 class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
@@ -113,6 +118,9 @@ class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
         elif self.mode == 'sbert':
             self.sbert = SentenceTransformer('sentence-transformers/stsb-xlm-r-multilingual')
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizerpath)
+            self.loss_fct = reward_sbert(self.sbert, self.tokenizer)
+            self.image_processor = ViTImageProcessor.from_pretrained(clippath)
+            self.skip = True
         else:
             self.loss_fct = CrossEntropyLoss()
             self.skip = False
@@ -190,10 +198,16 @@ class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
                 )
                 self.mode = 'clip'
             elif self.mode == 'sbert':
-                logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
-                gt = self.tokenizer.decode(labels, skip_special_tokens=True)
-                pd = self.tokenizer.decode(logits, skip_special_tokens=True)
-                loss = compute_sbert_loss(self.sbert, pd, gt)
+                # logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
+                # gt = self.tokenizer.decode(labels, skip_special_tokens=True)
+                # pd = self.tokenizer.decode(logits, skip_special_tokens=True)
+                self.mode = None  # someone think of a better idea for this please
+                loss = compute_rl_loss(
+                    self, self.image_processor, self.tokenizer,
+                    pixel_values, labels,
+                    self.loss_fct
+                )
+                self.mode = 'clip'
             else:
                 logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
                 loss = self.cce(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))

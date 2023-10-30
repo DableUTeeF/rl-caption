@@ -144,6 +144,7 @@ if __name__ == '__main__':
         disable_tqdm = True
     elif os.path.exists("/media/palm/Data/capgen/"):
         # os.environ['CUDA_VISIBLE_DEVICES'] = ''
+        clippath = 'openai/clip-vit-base-patch32'
         vit_model = "google/vit-base-patch16-224-in21k"
         text_decode_model = "gpt2"
         train_json = '/media/palm/data/coco/annotations/captions_train2017.json'
@@ -158,6 +159,7 @@ if __name__ == '__main__':
         workers = 0
         disable_tqdm = False
     else:
+        clippath = 'openai/clip-vit-base-patch32'
         vit_model = "google/vit-base-patch16-224-in21k"
         text_decode_model = "gpt2"
         src_dir = "/home/palm/data/coco/images"
