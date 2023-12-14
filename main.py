@@ -138,6 +138,7 @@ if __name__ == '__main__':
         output_dir = os.path.join('/project/lt200060-capgen/palm/rl-caption/workdir/', expname)
         bleu_path = '/home/nhongcha/hf-caption/bleu/bleu.py'
         rouge_path = '/home/nhongcha/hf-caption/rouge/'
+        sbertpath = '/project/lt200060-capgen/palm/huggingface/stsb-xlm-r-multilingual'
         bs = args.bs
         clippath = '/project/lt200060-capgen/palm/huggingface/clip-vit-base-patch32'
         workers = 4
@@ -181,7 +182,7 @@ if __name__ == '__main__':
     ignore_pad_token_for_loss = True
     encoder = AutoModel.from_pretrained(vit_model)
     decoder = AutoModelForCausalLM.from_pretrained(text_decode_model, add_cross_attention=True)
-    model = RLVisionEncoderDecoderModel(clippath, text_decode_model, mode, None, encoder, decoder)
+    model = RLVisionEncoderDecoderModel(clippath, sbertpath, text_decode_model, mode, None, encoder, decoder)
     model.load_state_dict(torch.load('workdir/train/pytorch_model.bin', map_location='cpu'), strict=False)
     feature_extractor = AutoProcessor.from_pretrained(clippath)
 

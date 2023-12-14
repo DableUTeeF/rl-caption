@@ -104,7 +104,7 @@ def reward_sbert(model, tokenizer):
 
 
 class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
-    def __init__(self, clippath, tokenizerpath, mode, *args, **kwargs):
+    def __init__(self, clippath, sbertpath, tokenizerpath, mode, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.mode = mode
         self.cce = CrossEntropyLoss()
@@ -116,7 +116,7 @@ class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
             self.loss_fct = reward_clip(self.clip_model, self.clip_tokenizer)
             self.skip = True
         elif self.mode == 'sbert':
-            self.sbert = SentenceTransformer('sentence-transformers/stsb-xlm-r-multilingual')
+            self.sbert = SentenceTransformer(sbertpath)
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizerpath)
             self.loss_fct = reward_sbert(self.sbert, self.tokenizer)
             self.image_processor = ViTImageProcessor.from_pretrained(clippath)
