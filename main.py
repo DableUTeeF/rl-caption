@@ -111,7 +111,7 @@ if __name__ == '__main__':
     parser.add_argument('--overwrite', action='store_true')
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--rl', action='store_true')
-    parser.add_argument('--clip', action='store_true')
+    parser.add_argument('--mode', type=str, default='clip')
     parser.add_argument('--logdir', type=str, default='./logs')
     args = parser.parse_args()
     expname = args.expname + f'_{args.bs}'
@@ -121,10 +121,7 @@ if __name__ == '__main__':
         args.resume = False
         args.bs = 1
     if args.rl:
-        if args.clip:
-            mode = 'clip'
-        else:
-            mode = 'sbert'
+        mode = args.mode
     else:
         mode = None
     if os.path.exists("/project/lt200060-capgen/palm/"):
@@ -182,7 +179,10 @@ if __name__ == '__main__':
     ignore_pad_token_for_loss = True
     encoder = AutoModel.from_pretrained(vit_model)
     decoder = AutoModelForCausalLM.from_pretrained(text_decode_model, add_cross_attention=True)
-    model = RLVisionEncoderDecoderModel(clippath, sbertpath, text_decode_model, mode, None, encoder, decoder)
+    if args.mode == 'evaluate':
+        model = RLVisionEncoderDecoderModel(clippath, bleu_path, text_decode_model, mode, None, encoder, decoder)
+    else:
+        model = RLVisionEncoderDecoderModel(clippath, sbertpath, text_decode_model, mode, None, encoder, decoder)
     model.load_state_dict(torch.load('workdir/train/pytorch_model.bin', map_location='cpu'), strict=False)
     feature_extractor = AutoProcessor.from_pretrained(clippath)
 

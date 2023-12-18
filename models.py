@@ -4,6 +4,7 @@ from torch import nn
 from transformers.modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput
 import torch
 from sentence_transformers import SentenceTransformer
+import evaluate
 
 
 def compute_loss(model, pixel_values, labels, sample_weights):
@@ -103,8 +104,15 @@ def reward_sbert(model, tokenizer):
     return _reward_fct
 
 
+def reward_evaluate(metric, tokenizer):
+    def _reward_fct(generated_texts, pixel_values, gt_ids, device):
+        result = metric.compute(predictions=generated_texts,
+                                references=gt_ids)
+        return result
+    return _reward_fct
+
 class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
-    def __init__(self, clippath, sbertpath, tokenizerpath, mode, *args, **kwargs):
+    def __init__(self, clippath, scorepath, tokenizerpath, mode, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.mode = mode
         self.cce = CrossEntropyLoss()
@@ -116,11 +124,18 @@ class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
             self.loss_fct = reward_clip(self.clip_model, self.clip_tokenizer)
             self.skip = True
         elif self.mode == 'sbert':
-            self.sbert = SentenceTransformer(sbertpath)
+            self.sbert = SentenceTransformer(scorepath)
             self.tokenizer = AutoTokenizer.from_pretrained(tokenizerpath)
             self.loss_fct = reward_sbert(self.sbert, self.tokenizer)
             self.image_processor = ViTImageProcessor.from_pretrained(clippath)
             self.skip = True
+        elif self.mode == 'evaluate':
+            self.bleu = evaluate.load(scorepath)
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizerpath)
+            self.loss_fct = reward_evaluate(self.bleu, self.tokenizer)
+            self.image_processor = ViTImageProcessor.from_pretrained(clippath)
+            self.skip = True
+
         else:
             self.loss_fct = CrossEntropyLoss()
             self.skip = False
