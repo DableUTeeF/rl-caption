@@ -1,7 +1,7 @@
 from transformers import ViTImageProcessor, AutoTokenizer, VisionEncoderDecoderModel, AutoProcessor, AutoModel, CLIPTokenizer
 from transformers.models.vision_encoder_decoder.modeling_vision_encoder_decoder import shift_tokens_right, CrossEntropyLoss
 from torch import nn
-from transformers.modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput
+from transformers.modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, TokenClassifierOutput
 import torch
 from sentence_transformers import SentenceTransformer
 import evaluate
@@ -135,6 +135,7 @@ class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
             self.loss_fct = reward_evaluate(self.bleu, self.tokenizer)
             self.image_processor = ViTImageProcessor.from_pretrained(clippath)
             self.skip = True
+            self.mode = 'clip'
 
         else:
             self.loss_fct = CrossEntropyLoss()
@@ -222,7 +223,7 @@ class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
                     pixel_values, labels,
                     self.loss_fct
                 )
-                self.mode = 'clip'
+                self.mode = 'sbert'
             else:
                 logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
                 loss = self.cce(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
@@ -245,6 +246,26 @@ class RLVisionEncoderDecoderModel(VisionEncoderDecoderModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+
+class RewardModel(nn.Module):
+    def __init__(self, vit_model, text_model):
+        super().__init__()
+        self.text = AutoModel.from_pretrained(text_model)
+        self.tokenzer = AutoTokenizer.from_pretrained(text_model)
+        self.image = AutoModel.from_pretrained(vit_model)
+        self.linear = nn.Linear(self.text.config.hidden_size + self.image.config.hidden_size, 1)
+
+    def forward(self, images, texts, labels):
+        image_output = self.image(**images)
+        token = self.tokenzer(texts, padding="max_length",
+                       max_length=256,
+                       return_tensors="pt",
+                       truncation=True).to(self.text.device)
+        text_output = self.text(**token)
+        output = self.linear(torch.cat((image_output.pooler_output, text_output.pooler_output), 1))
+        if labels is not None:
+            return TokenClassifierOutput(loss=((output - labels) ** 2).mean())
+        return output
 
 if __name__ == '__main__':
     model = SentenceTransformer('sentence-transformers/stsb-xlm-r-multilingual')

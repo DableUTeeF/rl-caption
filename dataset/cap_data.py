@@ -54,6 +54,71 @@ class ImageDataset(Dataset):
         return image, text
 
 
+class ThaiCOCODataset(Dataset):
+    def __init__(self,
+        json_files,
+        lst_dir,
+        coco_dir,
+        img_h=224,
+        img_w=224,
+    ):
+        self.data = []
+        self.img_h = img_h
+        self.img_w = img_w
+        for json_file in json_files:
+            json_file = json.load(open(json_file))
+            for key in json_file:
+                for ann in json_file[key]:
+                    if '-' in key.split('/')[0]:
+                        self.data.append((os.path.join(lst_dir, key), ann))
+                    else:
+                        self.data.append((os.path.join(coco_dir, key+'.jpg'), ann))
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        image, text = self.data[idx]
+        return image, text
+
+
+class MultiGenerationsDataset(Dataset):
+    def __init__(self,
+        json_files,
+        lst_dir,
+        coco_dir,
+        img_h=224,
+        img_w=224,
+    ):
+        self.data = []
+        self.img_h = img_h
+        self.img_w = img_w
+        for json_file in json_files:
+            json_file = json.load(open(json_file))
+            for key in json_file:
+                for ann in json_file[key]:
+                    if '-' in key.split('/')[0]:
+                        path = os.path.join(lst_dir, key)
+                    else:
+                        path = os.path.join(coco_dir, key+'.jpg')
+                    le = len(ann)
+                    if le  == 1:
+                        self.data.append(
+                            (path, ann[0], 1)
+                        )
+                        continue
+                    for i, text in enumerate(ann):
+                        self.data.append(
+                            (path, text, i / (le-1))
+                        )
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        image, text, val = self.data[idx]
+        return image, text, val
+
+
 if __name__ == '__main__':
     src_dir = "/home/palm/data/coco/images"
     val_json = '/home/palm/data/coco/annotations/annotations/captions_val2017.json'

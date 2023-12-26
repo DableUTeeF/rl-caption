@@ -5,7 +5,7 @@ import nltk
 import evaluate
 import numpy as np
 from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments
-from dataset.cap_data import ImageDataset
+from dataset.cap_data import ThaiCOCODataset
 from PIL import Image
 import argparse
 from transformers.trainer_callback import ProgressCallback
@@ -126,13 +126,14 @@ if __name__ == '__main__':
         mode = None
     if os.path.exists("/project/lt200060-capgen/palm/"):
         vit_model = "/project/lt200060-capgen/palm/huggingface/vit-base-patch16-224-in21k"
-        text_decode_model = '/project/lt200060-capgen/palm/huggingface/gpt2'
-        train_json = '/project/lt200060-capgen/coco/annotations/captions_train2017.json'
-        val_json = '/project/lt200060-capgen/coco/annotations/captions_val2017.json'
-        src_dir = "/project/lt200060-capgen/coco/images"
+        text_decode_model = '/project/lt200060-capgen/palm/huggingface/mGPT'
+        train_jsons = ['/lustrefs/disk/project/lt200060-capgen/palm/rl-caption/data/capgen_v0.2_train.json']
+        val_jsons = ['/lustrefs/disk/project/lt200060-capgen/palm/rl-caption/data/capgen_v0.2_val.json']
+        coco_dir = "/project/lt200060-capgen/coco/images"
+        lst_dir = '/project/lt200060-capgen/dataset/'
         config_file = '/home/nhongcha/mmdetection/configs/dino/dino-4scale_r50_8xb2-12e_coco.py'
         detector_weight = '/project/lt200060-capgen/palm/pretrained/dino-4scale_r50_8xb2-12e_coco_20221202_182705-55b2bba2.pth'
-        output_dir = os.path.join('/project/lt200060-capgen/palm/rl-caption/workdir/', expname)
+        output_dir = os.path.join('workdir/', expname)
         bleu_path = '/home/nhongcha/hf-caption/bleu/bleu.py'
         rouge_path = '/home/nhongcha/hf-caption/rouge/'
         sbertpath = '/project/lt200060-capgen/palm/huggingface/stsb-xlm-r-multilingual'
@@ -183,33 +184,29 @@ if __name__ == '__main__':
         model = RLVisionEncoderDecoderModel(clippath, bleu_path, text_decode_model, mode, None, encoder, decoder)
     else:
         model = RLVisionEncoderDecoderModel(clippath, sbertpath, text_decode_model, mode, None, encoder, decoder)
-    model.load_state_dict(torch.load('workdir/train/pytorch_model.bin', map_location='cpu'), strict=False)
+    # model.load_state_dict(torch.load('workdir/train/pytorch_model.bin', map_location='cpu'), strict=False)
     feature_extractor = AutoProcessor.from_pretrained(clippath)
 
     tokenizer = AutoTokenizer.from_pretrained(text_decode_model)
     tokenizer.pad_token = tokenizer.eos_token
 
+    # model.half()
     # update the model config
     model.config.eos_token_id = tokenizer.eos_token_id
     model.config.decoder_start_token_id = tokenizer.bos_token_id
     model.config.pad_token_id = tokenizer.pad_token_id
-    if not args.resume:
-        model.save_pretrained(os.path.join(output_dir, 'train'))
-        feature_extractor.save_pretrained(os.path.join(output_dir, 'train'))
-        tokenizer.save_pretrained(os.path.join(output_dir, 'train'))
-    dir = feats_dir if not args.rl else src_dir
-    train_set = ImageDataset(
-        train_json,
-        dir,
-        args.rl,
-        is_training=True,
+    feature_extractor.save_pretrained(os.path.join(output_dir, 'train'))
+    tokenizer.save_pretrained(os.path.join(output_dir, 'train'))
+    train_set = ThaiCOCODataset(
+        train_jsons,
+        lst_dir,
+        coco_dir,
     )
     print(len(train_set), flush=True)
-    valid_set = ImageDataset(
-        val_json,
-        dir,
-        args.rl,
-        is_training=False,
+    valid_set = ThaiCOCODataset(
+        val_jsons,
+        lst_dir,
+        coco_dir,
     )
     print(len(valid_set), flush=True)
     # train_loader = DataLoader(train_set, **train_hyperparams)
@@ -228,6 +225,7 @@ if __name__ == '__main__':
         logging_dir=logdir,
         dataloader_num_workers=workers,
         logging_strategy='steps',
+        optim='adamw_torch',
         logging_steps=100,
         disable_tqdm=disable_tqdm,
         report_to=['tensorboard']
